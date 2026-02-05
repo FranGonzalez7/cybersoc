@@ -1,0 +1,134 @@
+version: '3.8'
+
+networks:
+  soc-network:
+    driver: bridge
+
+volumes:
+  elasticsearch-data:
+  filebeat-data:
+  thehive-data:
+  cortex-data:
+  cassandra-data:
+
+services:
+  # =====================
+  # ELASTICSEARCH (SIEM Core)
+  # =====================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - soc-network
+    restart: unless-stopped
+
+  # =====================
+  # KIBANA (Visualización y Dashboards)
+  # =====================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a7a6311933d3503b89bc2dbc36572c33a6c10925682e591bffcab6911c06786d
+      - XPACK_REPORTING_ENCRYPTIONKEY=a7a6311933d3503b89bc2dbc36572c33a6c10925682e591bffcab6911c06786d
+      - XPACK_SECURITY_ENCRYPTIONKEY=a7a6311933d3503b89bc2dbc36572c33a6c10925682e591bffcab6911c06786d
+    ports:
+      - "5601:5601"
+    networks:
+      - soc-network
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  # =====================
+  # FILEBEAT (Recolección de Logs)
+  # =====================
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.1
+    container_name: filebeat
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/lib/docker.sock:/var/run/docker.sock:ro
+      - filebeat-data:/usr/share/filebeat/data
+    command: filebeat -e -strict.perms=false
+    networks:
+      - soc-network
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  # =====================
+  # CASSANDRA (Base de datos para TheHive)
+  # =====================
+  cassandra:
+    image: cassandra:4.0
+    container_name: cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=thp
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=200M
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    networks:
+      - soc-network
+    restart: unless-stopped
+
+  # =====================
+  # THEHIVE (Gestión de Incidentes)
+  # =====================
+  thehive:
+    image: strangebee/thehive:5.2
+    container_name: thehive
+    depends_on:
+      - cassandra
+    ports:
+      - "9000:9000"
+    environment:
+      - TH_CORTEX_URLS=http://cortex:9001
+    volumes:
+      - thehive-data:/opt/thp/thehive/data
+      - ./thehive/application.conf:/etc/thehive/application.conf:ro
+    networks:
+      - soc-network
+    restart: unless-stopped
+
+  # =====================
+  # KALI LINUX (Generación de Tráfico)
+  # =====================
+  kali:
+    image: kalilinux/kali-rolling
+    container_name: kali-attacker
+    stdin_open: true
+    tty: true
+    networks:
+      - soc-network
+    command: /bin/bash
+    restart: unless-stopped
+
+  # =====================
+  # MÁQUINA VÍCTIMA (SSH Server)
+  # =====================
+  victim-ssh:
+    image: ubuntu:22.04
+    container_name: victim-ssh
+    networks:
+      - soc-network
+    ports:
+      - "2222:22"
+    volumes:
+      - ./victim/setup-ssh.sh:/setup-ssh.sh
+      - /var/log:/host-logs
+    command: bash -c "chmod +x /setup-ssh.sh && /setup-ssh.sh"
+    restart: unless-stopped

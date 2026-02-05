@@ -1,0 +1,33 @@
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+filebeat.inputs:
+  - type: container
+    enabled: true
+    paths:
+      - '/var/lib/docker/containers/*/*.log'
+    fields:
+      log_type: docker
+
+# Configuración de salida a Elasticsearch (clásico, sin data streams)
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "filebeat-%{+yyyy.MM.dd}"
+
+# Desactivar setup (templates, etc) para usar índices clásicos
+setup.template.enabled: false
+setup.ilm.enabled: false
+setup.dashboards.enabled: false
+
+processors:
+  - add_host_metadata: ~
+  - add_docker_metadata: ~
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /usr/share/filebeat/logs
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644

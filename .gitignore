@@ -1,0 +1,15 @@
+# Datos de Docker
+*.log
+data/
+volumes/
+
+# Variables de entorno sensibles
+.env
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
