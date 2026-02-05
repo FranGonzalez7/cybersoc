@@ -10,6 +10,7 @@ volumes:
   thehive-data:
   cortex-data:
   cassandra-data:
+  victim-ssh-logs: 
 
 services:
   # =====================
@@ -121,14 +122,22 @@ services:
   # MÁQUINA VÍCTIMA (SSH Server)
   # =====================
   victim-ssh:
-    image: ubuntu:22.04
+    image: linuxserver/openssh-server:latest
     container_name: victim-ssh
+    hostname: victim-ssh
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Madrid
+      - PASSWORD_ACCESS=true
+      - USER_PASSWORD=Password123
+      - USER_NAME=testuser
+      - SUDO_ACCESS=false
+      - LOG_STDOUT=true
     networks:
       - soc-network
     ports:
-      - "2222:22"
+      - "2222:2222"
     volumes:
-      - ./victim/setup-ssh.sh:/setup-ssh.sh
-      - /var/log:/host-logs
-    command: bash -c "chmod +x /setup-ssh.sh && /setup-ssh.sh"
+      - victim-ssh-logs:/config/logs
     restart: unless-stopped
